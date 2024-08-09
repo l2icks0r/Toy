@@ -25,7 +25,22 @@
             let width, height, centerX, centerY;
             let imageData, buf, buf8, data;
 
-            let theta = 0;
+            const MAX_POINTS = 5000;
+            
+            let theta_x0 = 0;
+            let theta_x1 = 0;
+            let theta_y0 = 0;
+            let theta_y1 = 0;
+
+            let theta_x0_inc = -.02;
+            let theta_x1_inc = .03;
+            let theta_y0_inc = -.02;
+            let theta_y1_inc = -.022;
+
+            let theta_x0_space = .012;
+            let theta_x1_space = -.014;
+            let theta_y0_space = .010;
+            let theta_y1_space = -.008;
 
             function resizeCanvas() {
                 width = window.innerWidth;
@@ -51,15 +66,29 @@
                 imageData = ctx.getImageData(0, 0, width, height);
                 buf8.set(imageData.data);
 
-                if( theta >= 2 * Math.PI ) { theta = 0 }
-                theta += 0.01;
-                
-                var xp = Math.round( centerX * Math.cos(theta) + centerX );
-                var yp = Math.round( centerY * Math.sin(theta) + centerY );
+                let last_theta_x0 = theta_x0;
+                let last_theta_x1 = theta_x1;
+                let last_theta_y0 = theta_y0;
+                let last_theta_y1 = theta_y1;
 
-                plotPoint(xp, yp, 0xff00ff00);
+                for( let point = 0; point < MAX_POINTS; point++ ) {
+                    var xp = Math.round( centerX * (Math.sin(theta_x0) + Math.sin(theta_x1)) / 2 + centerX);
+                    var yp = Math.round( centerY * (Math.sin(theta_y0) + Math.sin(theta_y1)) / 2 + centerY);
 
-                plotPoint( centerX, centerY, 0xff00ff00 );
+                    theta_x0 += theta_x0_space;
+                    theta_x1 += theta_x1_space;
+
+                    theta_y0 += theta_y0_space;
+                    theta_y1 += theta_y1_space;
+
+                    plotPoint( xp, yp, 0xff00ff00);
+                }
+
+                theta_x0 = last_theta_x0 + theta_x0_inc;
+                theta_x1 = last_theta_x1 + theta_x1_inc;
+
+                theta_y0 = last_theta_y0 + theta_y0_inc;
+                theta_y1 = last_theta_y1 + theta_y1_inc;
 
                 updateCanvas();
                 fadeScreen();
@@ -80,7 +109,7 @@
 
             function fadeScreen() {
                 // Draw fading black rectangle
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.06)';
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.03)';
                 ctx.fillRect(0, 0, width, height);
             }
 
