@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Double Sine Sum</title>
+        <style>
+            body, html {
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+            }
+            canvas {
+                display: block;
+            }
+        </style>
+    </head>
+
+    <body>
+        <canvas id="patternCanvas"></canvas>
+        <script>
+            const canvas = document.getElementById('patternCanvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+            let width, height, centerX, centerY;
+            let imageData, buf, buf8, data;
+
+            function resizeCanvas() {
+                width = window.innerWidth;
+                height = window.innerHeight;
+                canvas.width = width;
+                canvas.height = height;
+                centerX = Math.floor(width / 2);
+                centerY = Math.floor(height / 2);
+
+                // Clear the canvas
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, width, height);
+
+                // Reinitialize imageData and buffers
+                imageData = ctx.getImageData(0, 0, width, height);
+                buf = new ArrayBuffer(imageData.data.length);
+                buf8 = new Uint8ClampedArray(buf);
+                data = new Uint32Array(buf);
+            }
+
+            function drawPattern() {
+                // Get the current state of the canvas
+                imageData = ctx.getImageData(0, 0, width, height);
+                buf8.set(imageData.data);
+
+                plotPoint(centerX, centerY, 0xff00ff00);
+
+                updateCanvas();
+                fadeScreen();
+                drawScreenOutline();
+
+                requestAnimationFrame(drawPattern);
+            }
+
+            function plotPoint( x, y, color ) {
+                const index = y * canvas.width + x;
+                data[ index ] = color;
+            }
+
+            function updateCanvas() {
+                imageData.data.set( buf8 );
+                ctx.putImageData( imageData, 0, 0 );
+            }
+
+            function fadeScreen() {
+                // Draw fading black rectangle
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.06)';
+                ctx.fillRect(0, 0, width, height);
+            }
+
+            function drawScreenOutline() {
+                // Draw render area rectangle lines
+                ctx.strokeStyle = 'green';
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(width, 0);
+                ctx.lineTo(width, height);
+                ctx.lineTo(0, height);
+                ctx.lineTo(0, 0);
+                ctx.stroke();
+            }
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+            drawPattern();
+        </script>
+    </body>
+</html>
