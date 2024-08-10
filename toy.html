@@ -55,7 +55,10 @@
 
             const MAX_POINTS = 5000;
             
-            let hue = 0;
+            let currentHue = Math.random() * 360;
+            let targetHue = Math.random() * 360;
+            let transitionProgress = 0;
+            const TRANSITION_SPEED = 0.0075;
 
             let theta_x0 = 0;
             let theta_x1 = 0;
@@ -101,6 +104,16 @@
                 imageData = ctx.getImageData(0, 0, width, height);
                 buf8.set(imageData.data);
 
+                // update the color transition
+                transitionProgress += TRANSITION_SPEED;
+                if( transitionProgress >= 1 ) {
+                    currentHue = targetHue;
+                    targetHue = Math.random() * 360;
+                    transitionProgress = 0;
+                }
+
+                let hue = currentHue + (targetHue - currentHue) * transitionProgress;
+
                 let last_theta_x0 = theta_x0;
                 let last_theta_x1 = theta_x1;
                 let last_theta_y0 = theta_y0;
@@ -118,8 +131,6 @@
 
                     let color = hsvToRgb( hue, 1, 1 );
                     plotPoint( xp, yp, color);
-
-                    hue = (hue + 0.0001) % 360;
                 }
 
                 theta_x0 = last_theta_x0 + theta_x0_inc;
