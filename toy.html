@@ -55,6 +55,8 @@
 
             const MAX_POINTS = 5000;
             
+            let hue = 0;
+
             let theta_x0 = 0;
             let theta_x1 = 0;
             let theta_y0 = 0;
@@ -69,6 +71,11 @@
             let theta_x1_space = -.014;
             let theta_y0_space = .010;
             let theta_y1_space = -.008;
+
+            fullscreenButton.addEventListener('click', toggleFullScreen);
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+            drawPattern();
 
             function resizeCanvas() {
                 width = window.innerWidth;
@@ -109,7 +116,10 @@
                     theta_y0 += theta_y0_space;
                     theta_y1 += theta_y1_space;
 
-                    plotPoint( xp, yp, 0xff00ff00);
+                    let color = hsvToRgb( hue, 1, 1 );
+                    plotPoint( xp, yp, color);
+
+                    hue = (hue + 0.0001) % 360;
                 }
 
                 theta_x0 = last_theta_x0 + theta_x0_inc;
@@ -163,10 +173,37 @@
                 }
             }
 
-            fullscreenButton.addEventListener('click', toggleFullScreen);
-            window.addEventListener('resize', resizeCanvas);
-            resizeCanvas();
-            drawPattern();
+            function hsvToRgb(h, s, v) {
+                h = Math.max(0, Math.min(360, h));
+                s = Math.max(0, Math.min(1, s));
+                v = Math.max(0, Math.min(1, v));
+
+                let c = v * s;
+                let x = c * (1 - Math.abs((h / 60) % 2 - 1));
+                let m = v - c;
+
+                let r, g, b;
+                if (h >= 0 && h < 60) {
+                    [r, g, b] = [c, x, 0];
+                } else if (h >= 60 && h < 120) {
+                    [r, g, b] = [x, c, 0];
+                } else if (h >= 120 && h < 180) {
+                    [r, g, b] = [0, c, x];
+                } else if (h >= 180 && h < 240) {
+                    [r, g, b] = [0, x, c];
+                } else if (h >= 240 && h < 300) {
+                    [r, g, b] = [x, 0, c];
+                } else {
+                    [r, g, b] = [c, 0, x];
+                }
+
+                r = Math.round((r + m) * 255);
+                g = Math.round((g + m) * 255);
+                b = Math.round((b + m) * 255);
+
+                return (255 << 24) | (b << 16) | (g << 8) | r;
+            }
+
         </script>
     </body>
 </html>
