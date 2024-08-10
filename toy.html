@@ -13,11 +13,39 @@
             canvas {
                 display: block;
             }
+            #fullscreenButton {
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                width: 40px;
+                height: 40px;
+                background-color: rgba(255, 255, 255, 0.3);
+                border: none;
+                border-radius: 50%;
+                cursor: pointer;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                transition: background-color 0.3s;
+            }
+            #fullscreenButton:hover {
+                background-color: rgba(255, 255, 255, 0.5);
+            }
+            #fullscreenButton svg {
+                width: 24px;
+                height: 24px;
+                fill: #000;
+            }
         </style>
     </head>
 
     <body>
         <canvas id="patternCanvas"></canvas>
+        <button id="fullscreenButton">
+            <svg viewBox="0 0 24 24">
+                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+            </svg>
+        </button>
         <script>
             const canvas = document.getElementById('patternCanvas');
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -125,6 +153,17 @@
                 ctx.stroke();
             }
 
+            function toggleFullScreen() {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen();
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    }
+                }
+            }
+
+            fullscreenButton.addEventListener('click', toggleFullScreen);
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
             drawPattern();
