@@ -74,12 +74,54 @@
         <script>
             // This is a test from Lin00x
             const canvas = document.getElementById('patternCanvas');
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, preserveDrawingBuffer: true });
             const settingsButton = document.getElementById('settingsButton');
             const settingsPanel = document.getElementById('settingsPanel');
 
             let width, height, centerX, centerY;
-            let imageData, buf, buf8, data;
+
+            // Points are positioned entirely in the vertex shader from gl_VertexID and the theta uniforms
+            const pointProgram = createProgram(`#version 300 es
+                precision highp float;
+                uniform vec4 uTheta;   // x0, x1, y0, y1 at the first point
+                uniform vec4 uSpace;   // per-point step for each theta
+                uniform vec2 uCenter;
+                uniform vec2 uSize;
+                void main() {
+                    vec4 t = uTheta + float(gl_VertexID) * uSpace;
+                    float x = floor(uCenter.x * (sin(t.x) + sin(t.y)) * 0.5 + uCenter.x + 0.5);
+                    float y = floor(uCenter.y * (sin(t.z) + sin(t.w)) * 0.5 + uCenter.y + 0.5);
+                    gl_Position = vec4((x + 0.5) / uSize.x * 2.0 - 1.0, 1.0 - (y + 0.5) / uSize.y * 2.0, 0.0, 1.0);
+                    gl_PointSize = 1.0;
+                }`, `#version 300 es
+                precision highp float;
+                uniform vec3 uColor;
+                out vec4 outColor;
+                void main() {
+                    outColor = vec4(uColor, 1.0);
+                }`);
+
+            // Full-screen triangle for the fade pass
+            const fadeProgram = createProgram(`#version 300 es
+                void main() {
+                    vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+                    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+                }`, `#version 300 es
+                precision highp float;
+                uniform float uSubtract;
+                out vec4 outColor;
+                void main() {
+                    outColor = vec4(vec3(uSubtract), 1.0);
+                }`);
+
+            const pointUniforms = {
+                theta: gl.getUniformLocation(pointProgram, 'uTheta'),
+                space: gl.getUniformLocation(pointProgram, 'uSpace'),
+                center: gl.getUniformLocation(pointProgram, 'uCenter'),
+                size: gl.getUniformLocation(pointProgram, 'uSize'),
+                color: gl.getUniformLocation(pointProgram, 'uColor')
+            };
+            const fadeSubtractUniform = gl.getUniformLocation(fadeProgram, 'uSubtract');
 
             const MAX_POINTS = 5000;
             
@@ -118,21 +160,30 @@
                 centerY = Math.floor(height / 2);
 
                 // Clear the canvas
-                ctx.fillStyle = 'black';
-                ctx.fillRect(0, 0, width, height);
+                gl.viewport(0, 0, width, height);
+                gl.clearColor(0, 0, 0, 1);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+            }
 
-                // Reinitialize imageData and buffers
-                imageData = ctx.getImageData(0, 0, width, height);
-                buf = new ArrayBuffer(imageData.data.length);
-                buf8 = new Uint8ClampedArray(buf);
-                data = new Uint32Array(buf);
+            function createProgram(vertexSource, fragmentSource) {
+                const program = gl.createProgram();
+                for (const [type, source] of [[gl.VERTEX_SHADER, vertexSource], [gl.FRAGMENT_SHADER, fragmentSource]]) {
+                    const shader = gl.createShader(type);
+                    gl.shaderSource(shader, source);
+                    gl.compileShader(shader);
+                    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                        throw new Error(gl.getShaderInfoLog(shader));
+                    }
+                    gl.attachShader(program, shader);
+                }
+                gl.linkProgram(program);
+                if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                    throw new Error(gl.getProgramInfoLog(program));
+                }
+                return program;
             }
 
             function drawPattern() {
-                // Get the current state of the canvas
-                imageData = ctx.getImageData(0, 0, width, height);
-                buf8.set(imageData.data);
-
                 // update the color transition
                 transitionProgress += TRANSITION_SPEED;
                 if( transitionProgress >= 1 ) {
@@ -143,65 +194,67 @@
 
                 let hue = currentHue + (targetHue - currentHue) * transitionProgress;
 
-                let last_theta_x0 = theta_x0;
-                let last_theta_x1 = theta_x1;
-                let last_theta_y0 = theta_y0;
-                let last_theta_y1 = theta_y1;
+                plotPoints( hsvToRgb( hue, 1, 1 ) );
 
-                for( let point = 0; point < MAX_POINTS; point++ ) {
-                    var xp = Math.round( centerX * (Math.sin(theta_x0) + Math.sin(theta_x1)) / 2 + centerX);
-                    var yp = Math.round( centerY * (Math.sin(theta_y0) + Math.sin(theta_y1)) / 2 + centerY);
+                // The thetas advance by one frame increment; the per-point steps are applied in the shader
+                theta_x0 += theta_x0_inc;
+                theta_x1 += theta_x1_inc;
 
-                    theta_x0 += theta_x0_space;
-                    theta_x1 += theta_x1_space;
+                theta_y0 += theta_y0_inc;
+                theta_y1 += theta_y1_inc;
 
-                    theta_y0 += theta_y0_space;
-                    theta_y1 += theta_y1_space;
-
-                    let color = hsvToRgb( hue, 1, 1 );
-                    plotPoint( xp, yp, color);
-                }
-
-                theta_x0 = last_theta_x0 + theta_x0_inc;
-                theta_x1 = last_theta_x1 + theta_x1_inc;
-
-                theta_y0 = last_theta_y0 + theta_y0_inc;
-                theta_y1 = last_theta_y1 + theta_y1_inc;
-
-                updateCanvas();
                 fadeScreen();
                 drawScreenOutline();
 
                 requestAnimationFrame(drawPattern);
             }
 
-            function plotPoint( x, y, color ) {
-                const index = y * canvas.width + x;
-                data[ index ] = color;
-            }
+            function plotPoints( color ) {
+                // Wrap the angles so the shader's float32 sin() keeps its precision as they accumulate
+                const wrap = theta => theta % (2 * Math.PI);
 
-            function updateCanvas() {
-                imageData.data.set( buf8 );
-                ctx.putImageData( imageData, 0, 0 );
+                gl.disable(gl.BLEND);
+                gl.useProgram(pointProgram);
+                gl.uniform4f(pointUniforms.theta, wrap(theta_x0), wrap(theta_x1), wrap(theta_y0), wrap(theta_y1));
+                gl.uniform4f(pointUniforms.space, theta_x0_space, theta_x1_space, theta_y0_space, theta_y1_space);
+                gl.uniform2f(pointUniforms.center, centerX, centerY);
+                gl.uniform2f(pointUniforms.size, width, height);
+                gl.uniform3fv(pointUniforms.color, color);
+                gl.drawArrays(gl.POINTS, 0, MAX_POINTS);
             }
 
             function fadeScreen() {
-                // Draw fading black rectangle
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.03)';
-                ctx.fillRect(0, 0, width, height);
+                // Fade towards black: dst = dst * (1 - FADE) - 0.5/255. Plain alpha blending rounds to nearest in
+                // 8 bits, so values below ~17 would never decay and leave a permanent haze; the small subtraction
+                // makes the result round down instead, so every value keeps fading to zero.
+                const FADE = 0.03;
+                gl.enable(gl.BLEND);
+                gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);
+                gl.blendFunc(gl.ONE, gl.CONSTANT_ALPHA);
+                gl.blendColor(0, 0, 0, 1 - FADE);
+                gl.useProgram(fadeProgram);
+                gl.uniform1f(fadeSubtractUniform, 0.5 / 255);
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+                gl.blendEquation(gl.FUNC_ADD);
             }
 
             function drawScreenOutline() {
-                // Draw render area rectangle lines
-                ctx.strokeStyle = "#8040ff";
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.lineTo(width, 0);
-                ctx.lineTo(width, height);
-                ctx.lineTo(0, height);
-                ctx.lineTo(0, 0);
-                ctx.stroke();
+                // Draw render area rectangle lines (WebGL can't stroke wide lines, so clear thin scissored strips)
+                const thickness = 2;
+                gl.disable(gl.BLEND);
+                gl.enable(gl.SCISSOR_TEST);
+                gl.clearColor(0x80 / 255, 0x40 / 255, 1, 1);
+                for (const [x, y, w, h] of [
+                    [0, 0, width, thickness],
+                    [0, height - thickness, width, thickness],
+                    [0, 0, thickness, height],
+                    [width - thickness, 0, thickness, height]
+                ]) {
+                    gl.scissor(x, y, w, h);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+                }
+                gl.disable(gl.SCISSOR_TEST);
+                gl.clearColor(0, 0, 0, 1);
             }
 
             function toggleFullScreen() {
@@ -246,11 +299,7 @@
                     [r, g, b] = [c, 0, x];
                 }
 
-                r = Math.round((r + m) * 255);
-                g = Math.round((g + m) * 255);
-                b = Math.round((b + m) * 255);
-
-                return (255 << 24) | (b << 16) | (g << 8) | r;
+                return [r + m, g + m, b + m];
             }
         </script>
     </body>
